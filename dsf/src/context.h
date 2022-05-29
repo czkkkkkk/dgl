@@ -5,6 +5,7 @@
 #define DGL_DSF_CONTEXT_H_
 
 #include <memory>
+#include <string>
 
 #include "./coordinator.h"
 

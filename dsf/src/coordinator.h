@@ -6,10 +6,12 @@
 
 #include <dmlc/logging.h>
 
-#include <memory>
-#include <vector>
+#include <algorithm>
 #include <chrono>
+#include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <zmq.hpp>
 #include "./base/bin_stream.h"
@@ -17,8 +19,14 @@
 namespace dgl {
 namespace dsf {
 
-enum CommEvent { Allgather = 0, Scatter = 1, Gather = 2, Broadcast = 3,
-      RingExchange = 4, CommEnd = 5 };
+enum CommEvent {
+  Allgather = 0,
+  Scatter = 1,
+  Gather = 2,
+  Broadcast = 3,
+  RingExchange = 4,
+  CommEnd = 5
+};
 
 struct ProcInfo {
   int pid;
@@ -26,22 +34,17 @@ struct ProcInfo {
   int rank;
   std::string hostname;
 
-  bool SameDevice(const ProcInfo& rhs) {
+  bool SameDevice(const ProcInfo &rhs) {
     return hostname == rhs.hostname && dev_id == rhs.dev_id;
   }
-  BinStream &serialize(BinStream &bs) const {
-    bs << pid << dev_id << rank << hostname;
-    return bs;
-  }
-  BinStream &deserialize(BinStream &bs) {
-    bs >> pid >> dev_id >> rank >> hostname;
-    return bs;
-  }
+
+  friend BinStream &operator<<(BinStream &bs, const ProcInfo &info);
+  friend BinStream &operator>>(BinStream &bs, ProcInfo &info);
 };
 
 class Coordinator {
  public:
-  Coordinator(int rank, int workd_size, int port=12306);
+  Coordinator(int rank, int workd_size, int port = 12306);
 
   int GetWorldSize() const { return n_peers_; }
   int GetRank() const { return rank_; }
@@ -65,10 +68,9 @@ class Coordinator {
   void Barrier();
 
   template <typename T>
-  void Allgather(std::vector<T> &vec) {
-    CHECK(vec.size() == n_peers_);
+  std::vector<T> Allgather(const T &v) {
     auto bs = std::make_shared<BinStream>();
-    *bs << CommEvent::Allgather << rank_ << vec[rank_];
+    *bs << CommEvent::Allgather << rank_ << v;
     SendBinstreamTo(-1, bs);
     if (is_root_) {
       std::vector<T> root_vals(n_peers_);
@@ -88,8 +90,11 @@ class Coordinator {
       }
     }
     auto allinfos = RecvBinstreamFromRoot();
-    *allinfos >> vec;
+    std::vector<T> ret;
+    *allinfos >> ret;
+    return ret;
   }
+
   template <typename T>
   T Scatter(const std::vector<T> &vec) {
     if (is_root_) {
@@ -109,14 +114,14 @@ class Coordinator {
     return ret;
   }
   template <typename T>
-  std::vector<T> Gather(const T& val) {
+  std::vector<T> Gather(const T &val) {
     auto bs = std::make_shared<BinStream>();
     *bs << CommEvent::Gather << rank_ << val;
     SendBinstreamTo(-1, bs);
     std::vector<T> ret;
-    if(IsRoot()) {
+    if (IsRoot()) {
       ret.resize(n_peers_);
-      for(int i = 0; i < n_peers_; ++i) {
+      for (int i = 0; i < n_peers_; ++i) {
         auto bs = RootRecvBinStream();
         CommEvent e;
         int rank;
@@ -131,29 +136,29 @@ class Coordinator {
   }
 
   template <typename T>
-  std::vector<std::vector<T>> GatherLargeVector(const std::vector<T>& vec) {
+  std::vector<std::vector<T>> GatherLargeVector(const std::vector<T> &vec) {
     constexpr size_t per_block_size = 100000000;
     std::vector<std::vector<T>> ret(n_peers_);
     std::vector<size_t> sizes = Gather(vec.size());
     size_t round = 0;
-    if(IsRoot()) {
+    if (IsRoot()) {
       size_t max_size = 0;
-      for(auto v: sizes) {
+      for (auto v : sizes) {
         max_size = std::max(max_size, v);
       }
       round = (max_size + per_block_size - 1) / per_block_size;
     }
     Broadcast(round);
-    for(size_t i = 0; i < round; ++i) {
+    for (size_t i = 0; i < round; ++i) {
       size_t start = i * per_block_size;
       size_t end = std::min(start + per_block_size, vec.size());
       std::vector<T> to_send;
-      if(start < end) {
+      if (start < end) {
         to_send = std::vector<T>(vec.begin() + start, vec.begin() + end);
       }
       auto recvs = Gather(to_send);
-      if(IsRoot()) {
-        for(int i = 0; i < n_peers_; ++i) {
+      if (IsRoot()) {
+        for (int i = 0; i < n_peers_; ++i) {
           ret[i].insert(ret[i].end(), recvs[i].begin(), recvs[i].end());
         }
       }
@@ -162,7 +167,7 @@ class Coordinator {
   }
 
   template <typename T>
-  void Broadcast(T &val) {
+  T Broadcast(const T &val) {
     if (IsRoot()) {
       for (int i = 0; i < n_peers_; ++i) {
         auto bs = std::make_shared<BinStream>();
@@ -172,8 +177,10 @@ class Coordinator {
     }
     auto my_msg = RecvBinstreamFromRoot();
     CommEvent e;
-    *my_msg >> e >> val;
+    T ret;
+    *my_msg >> e >> ret;
     CHECK(e == CommEvent::Broadcast);
+    return ret;
   }
   template <typename T>
   T RingExchange(int needed_peer_id, const T &val) {
@@ -225,7 +232,7 @@ class Coordinator {
   std::vector<ProcInfo> peer_infos_;
 };
 
-}
-}
+}  // namespace dsf
+}  // namespace dgl
 
 #endif  // DGL_DSF_COORDINATOR_H_

@@ -5,6 +5,7 @@
 #define DGL_DSF_UTILS_H_
 
 #include <cstdlib>
+#include <string>
 
 namespace dgl {
 namespace dsf {

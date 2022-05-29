@@ -124,7 +124,7 @@ operator<<(BinStream &stream, const InputT &x) {
   static_assert(
       IS_TRIVIALLY_COPYABLE(InputT),
       "For non trivially copyable type, serialization functions are needed");
-  stream.push_back_bytes((char *)&x, sizeof(InputT));
+  stream.push_back_bytes(reinterpret_cast<const char *>(&x), sizeof(InputT));
   return stream;
 }
 
@@ -134,7 +134,7 @@ operator>>(BinStream &stream, OutputT &x) {
   static_assert(
       IS_TRIVIALLY_COPYABLE(OutputT),
       "For non trivially copyable type, serialization functions are needed");
-  x = *(OutputT *)(stream.pop_front_bytes(sizeof(OutputT)));
+  x = *static_cast<OutputT *>(stream.pop_front_bytes(sizeof(OutputT)));
   return stream;
 }
 
@@ -321,13 +321,7 @@ BinStream &operator>>(BinStream &stream, std::string &x);
 BinStream &operator<<(BinStream &stream, const std::vector<bool> &v);
 BinStream &operator>>(BinStream &stream, std::vector<bool> &v);
 
-template <typename Value>
-Value deser(BinStream &in) {
-  Value v;
-  in >> v;
-  return v;
-}
-
 }  // namespace dsf
 }  // namespace dgl
-#endif  // DGL_DSF_BIN_STREAM_H_
+
+#endif  // DGL_DSF_BASE_BIN_STREAM_H_

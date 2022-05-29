@@ -1,11 +1,12 @@
 /*!
  *  Copyright (c) 2022 by Contributors
  */
-#ifndef DGL_DSF_BASE_ZMQ_HELPERS_
-#define DGL_DSF_BASE_ZMQ_HELPERS_
+#ifndef DGL_DSF_BASE_ZMQ_HELPERS_H_
+#define DGL_DSF_BASE_ZMQ_HELPERS_H_
 
 #include <dmlc/logging.h>
 #include <string>
+#include <memory>
 
 #include "zmq.h"
 #include "zmq.hpp"
@@ -105,7 +106,7 @@ inline void zmq_send_binstream_ptr(zmq::socket_t *socket,
           },
           hint);
       CHECK_EQ(rc, 0) << "[ZMQ Helper] Cannot init data for zmq send";
-      rc = zmq_msg_send(&msg, (void *)(*socket), flag);
+      rc = zmq_msg_send(&msg, static_cast<void *>(*socket), flag);
       CHECK_EQ(rc, len) << "[ZMQ Helper]  zmq::send error! errno "
                         << strerror(errno);
       break;
@@ -172,4 +173,4 @@ inline BinStream zmq_recv_binstream(zmq::socket_t *socket,
 }  // namespace dsf
 }  // namespace dgl
 
-#endif
+#endif  // DGL_DSF_BASE_ZMQ_HELPERS_H_

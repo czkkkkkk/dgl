@@ -4,12 +4,24 @@
 #include "coordinator.h"
 
 #include <unistd.h>
+#include <map>
+#include <string>
 
 #include "base/zmq_helpers.h"
 #include "utils.h"
 
 namespace dgl {
 namespace dsf {
+
+BinStream &operator<<(BinStream &bs, const ProcInfo &info) {
+    bs << info.pid << info.dev_id << info.rank << info.hostname;
+  return bs;
+}
+
+BinStream &operator>>(BinStream &bs, ProcInfo &info) {
+  bs >> info.pid >> info.dev_id >> info.rank >> info.hostname;
+  return bs;
+}
 
 Coordinator::Coordinator(int rank, int world_size, int port) {
   rank_ = rank;
@@ -85,7 +97,7 @@ void Coordinator::_Initialize(int mport) {
       peer_infos_[i].dev_id = hosts_cnt[hostname]++;
     }
   }
-  Broadcast(peer_infos_);
+  peer_infos_ = Broadcast(peer_infos_);
   LOG(INFO) << "My rank is " + std::to_string(rank_) + ", my device id is " +
                    std::to_string(peer_infos_[rank_].dev_id);
 }
