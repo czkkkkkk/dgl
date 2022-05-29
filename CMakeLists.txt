@@ -170,6 +170,15 @@ file(GLOB_RECURSE DGL_SRC_1
 
 list(APPEND DGL_SRC ${DGL_SRC_1})
 
+###### DSF ###############
+file(GLOB_RECURSE DSF_SRC
+  dsf/src/*.cc
+  dsf/src/base/*.cc
+)
+list(APPEND DGL_SRC ${DSF_SRC})
+###### DSF ###############
+
+
 if (NOT MSVC)
   file(GLOB_RECURSE DGL_RPC_SRC src/rpc/*.cc)
 else()
@@ -216,6 +225,27 @@ target_include_directories(dgl PRIVATE "third_party/METIS/include/")
 target_include_directories(dgl PRIVATE "tensoradapter/include")
 target_include_directories(dgl PRIVATE "third_party/nanoflann/include")
 target_include_directories(dgl PRIVATE "third_party/libxsmm/include")
+
+
+###### DSF ###############
+target_include_directories(dgl PRIVATE "dsf/src")
+target_include_directories(dgl PRIVATE "src/")
+
+# ZMQ
+find_path(ZMQ_INCLUDE_DIR NAMES zmq.hpp)
+find_library(ZMQ_LIBRARY NAMES zmq)
+
+if(ZMQ_INCLUDE_DIR AND ZMQ_LIBRARY)
+  message(STATUS "Found ZeroMQ:")
+  message(STATUS "  (Headers) ${ZMQ_INCLUDE_DIR}")
+  message(STATUS "  (Library) ${ZMQ_LIBRARY}")
+else()
+  message(FATAL_ERROR "ZeorMQ not found")
+endif()
+target_include_directories(dgl PRIVATE ${ZMQ_INCLUDE_DIR})
+list(APPEND DGL_LINKER_LIBS ${ZMQ_LIBRARY})
+
+###### DSF ###############
 
 
 # For serialization

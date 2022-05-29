@@ -1,0 +1,1 @@
+python3 ../third_party/dmlc-core/scripts/lint.py dgl-dsf cpp ../dsf
