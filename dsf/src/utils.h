@@ -6,9 +6,12 @@
 
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 namespace dgl {
 namespace dsf {
+
+using IdType = int64_t;
 
 template <typename T>
 T GetEnvParam(const std::string &key, T default_value) {
@@ -38,6 +41,17 @@ void SetEnvParam(const char *key, T value) {
 
 int GetAvailablePort();
 std::string GetHostName();
+
+template <typename T>
+std::vector<T> Flatten(const std::vector<std::vector<T>> &input) {
+  std::vector<T> output;
+  for (const auto &vec : input) {
+    for (auto v : vec) {
+      output.push_back(v);
+    }
+  }
+  return output;
+}
 
 }  // namespace dsf
 }  // namespace dgl

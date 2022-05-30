@@ -14,7 +14,7 @@ namespace dgl {
 namespace dsf {
 
 BinStream &operator<<(BinStream &bs, const ProcInfo &info) {
-    bs << info.pid << info.dev_id << info.rank << info.hostname;
+  bs << info.pid << info.dev_id << info.rank << info.hostname;
   return bs;
 }
 
