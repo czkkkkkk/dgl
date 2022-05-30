@@ -12,6 +12,7 @@ namespace dgl {
 namespace dsf {
 
 using IdType = int64_t;
+static constexpr int MAX_CONN = 8;
 
 template <typename T>
 T GetEnvParam(const std::string &key, T default_value) {
