@@ -8,12 +8,14 @@
 #include <string>
 
 #include "./coordinator.h"
+#include "./conn/communicator.h"
 
 namespace dgl {
 namespace dsf {
 
 struct Context {
   int rank, world_size;
+  std::unique_ptr<Communicator> communicator;
   std::unique_ptr<Coordinator> coor;
 
   static Context* Global() {

@@ -5,6 +5,7 @@
 #ifndef DGL_DSF_CUDA_SAMPLE_KERNEL_H_
 #define DGL_DSF_CUDA_SAMPLE_KERNEL_H_
 
+#include "../context.h"
 #include "../utils.h"
 
 namespace dgl {
@@ -12,16 +13,21 @@ namespace dsf {
 
 struct SampleKernelOption {
   IdType *indptr, *indices;
-  IdType* seeds;
+  IdType *global_nid_map;
+  IdType *seeds;
   int64_t n_seeds, n_global_nodes, n_local_nodes;
   int64_t fanout;
-  IdType *out_ptr, *out_indices;
+  IdType *min_vids;
+  int rank, world_size;
+  IdType *out_indices;
 
-  int nodes_per_group;
+  int nodes_per_block;
   int threads_per_peer;
 };
+
+void Sample(SampleKernelOption option);
 
 }  // namespace dsf
 }  // namespace dgl
 
-#endif // DGL_DSF_CUDA_SAMPLE_KERNEL_H_
+#endif  // DGL_DSF_CUDA_SAMPLE_KERNEL_H_

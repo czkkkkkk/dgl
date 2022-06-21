@@ -14,12 +14,14 @@ namespace dsf {
 
 struct SampleOption {
   HeteroGraphRef hg;
-  IdArray seeds;
+  IdArray seeds; // Seeds with global node ids
   IdArray global_nid_map;
   IdArray min_vids;
   int64_t fanout;
   int64_t n_local_nodes, n_global_nodes;
 };
+
+IdArray SampleNeighbors(const SampleOption& option);
 
 }  // namespace dsf
 }  // namespace dgl

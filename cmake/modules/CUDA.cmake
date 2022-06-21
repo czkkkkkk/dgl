@@ -250,10 +250,12 @@ macro(dgl_config_cuda out_variable)
     src/graph/sampling/randomwalks/*.cu
   )
 
-###### DSF ###############
-  # file(GLOB_RECURSE DSF_CUDA_SRC)
-  # list(APPEND DGL_CUDA_SRC ${DSF_CUDA_SRC})
-###### DSF ###############
+  ###### DSF ###############
+  file(GLOB_RECURSE DSF_CUDA_SRC
+    dsf/src/cuda/*.cu
+  )
+  list(APPEND DGL_CUDA_SRC ${DSF_CUDA_SRC})
+  ###### DSF ###############
 
   # NVCC flags
   # Manually set everything
