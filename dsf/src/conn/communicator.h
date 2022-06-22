@@ -4,7 +4,7 @@
 #ifndef DGL_DSF_CUDA_CONN_H_
 #define DGL_DSF_CUDA_CONN_H_
 
-#define MAX_NUM_COMM_BLOCKS 32
+#define MAX_NUM_COMM_BLOCKS 64
 
 #include "./conn_info.h"
 #include "./connection.h"

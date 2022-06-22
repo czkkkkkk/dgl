@@ -13,6 +13,14 @@ using namespace dgl;
 using namespace dgl::runtime;
 using namespace dgl::dsf;
 
+template<typename T>
+void ExpVectorEq(const std::vector<T>& lhs, const std::vector<T>& rhs) {
+  EXPECT_EQ(lhs.size(), rhs.size());
+  for(size_t i = 0; i < lhs.size(); ++i) {
+    EXPECT_EQ(lhs[i], rhs[i]);
+  }
+}
+
 void _SimpleTestTwoWorkers(int rank, int world_size) {
   SampleOption options[2];
   {
@@ -46,6 +54,12 @@ void _SimpleTestTwoWorkers(int rank, int world_size) {
     option.fanout = 2;
   }
   auto frontier = SampleNeighbors(options[rank]);
+  auto vec = frontier.ToVector<int64_t>();
+  if(rank == 0) {
+    ExpVectorEq(vec, {2, 2, 1, 1});
+  } else {
+    ExpVectorEq(vec, {2, 3, 3, 0});
+  }
 }
 
 TEST(Sampling, Functional) {

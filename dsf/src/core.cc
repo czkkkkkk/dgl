@@ -39,6 +39,7 @@ void Initialize(int rank, int world_size) {
   auto* context = Context::Global();
   context->rank = rank;
   context->world_size = world_size;
+  CUDACHECK(cudaSetDevice(rank));
   InitCoordinator(context);
   InitCommunicator(context);
 

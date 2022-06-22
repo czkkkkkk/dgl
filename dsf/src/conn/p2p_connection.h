@@ -54,8 +54,8 @@ class P2pConnection : public Connection {
     }
     conn_info->peer_ready = &ptr->ready;
     conn_info->peer_done = &ptr->done;
-    conn_info->my_buffer[0] = BuildVarArray(&ptr->buffer);
-    conn_info->my_buffer[1] = BuildVarArray(&ptr->buffer + buffer_size / 2);
+    conn_info->peer_buffer[0] = BuildVarArray(&ptr->buffer);
+    conn_info->peer_buffer[1] = BuildVarArray(&ptr->buffer + buffer_size / 2);
   }
 };
 

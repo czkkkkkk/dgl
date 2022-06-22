@@ -8,6 +8,7 @@
 
 #include "../conn/communicator.h"
 #include "../utils.h"
+#include "./comm_sync.cuh"
 
 #define DIVUP(x, y) ((x) + (y)-1) / (y)
 
@@ -63,25 +64,68 @@ __device__ void SendSeeds(IdType* input, IdType size, int tid, int n_threads,
   }
 }
 
+__device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
+                            int tid, int n_threads, int fanout, IdType* indptr,
+                            IdType* indices, IdType* global_nid_map) {
+  int64_t n_seeds = *seeds.size;
+  if (tid == 0) {
+    *output.size = n_seeds * fanout;
+  }
+  IdType* seeds_ptr = (IdType*)seeds.data;
+  IdType* outptr = (IdType*)output.data;
+  int group_size = 1;
+  while (group_size < fanout && group_size * 2 <= n_threads) {
+    group_size *= 2;
+  }
+  int n_groups = n_threads / group_size;
+  int row = tid / group_size;
+  int col = tid % group_size;
+  while (row < n_seeds) {
+    IdType local_nid = seeds_ptr[row] - seed_offset;
+    IdType in_row_start = indptr[local_nid];
+    IdType out_row_start = row * fanout;
+    IdType deg = indptr[local_nid + 1] - in_row_start;
+    for (int idx = col; idx < fanout; idx += group_size) {
+      // FIXME currently we sequential sample seeds
+      const int64_t edge = idx % deg;
+      outptr[out_row_start + idx] =
+          global_nid_map[indices[in_row_start + edge]];
+    }
+    row += n_groups;
+  }
+}
+
+__device__ void CopyNeighToOutptr(VarArray neighbors, IdType n_seeds,
+                                  IdType* index, int fanout, int tid,
+                                  int n_threads, IdType* out_indices) {
+  IdType* neigh_ptr = (IdType*)neighbors.data;
+  while (tid < n_seeds * fanout) {
+    int seed = tid / fanout;
+    int offset = tid % fanout;
+    IdType idx = index[seed];
+    out_indices[idx * fanout + offset] = neigh_ptr[tid];
+    tid += n_threads;
+  }
+}
+
 __global__ void FusedSampleKernel(SampleKernelOption option,
                                   Communicator* communicator) {
   int bid = blockIdx.x;
   int tid = threadIdx.x;
+  int rank = option.rank;
   int peer_id = tid / option.threads_per_peer;
   int local_tid = tid % option.threads_per_peer;
   int n_blocks = gridDim.x;
   int n_peers = option.world_size;
   int fanout = option.fanout;
-  /*
-  VarArray peer_seed_recv_buffer =
-      communicator->block_conns[bid].conn_infos[peer_id].peer_buffer[0];
-  VarArray peer_neigh_recv_buffer =
-      communicator->block_conns[bid].conn_infos[peer_id].peer_buffer[1];
-  VarArray my_seed_recv_buffer =
-      communicator->block_conns[bid].conn_infos[peer_id].my_buffer[0];
-  VarArray my_neigh_recv_buffer =
-      communicator->block_conns[bid].conn_infos[peer_id].my_buffer[1];
-  */
+  ConnInfo* conn_info = communicator->block_conns[bid].conn_infos + peer_id;
+  VarArray peer_seed_recv_buffer = conn_info->peer_buffer[0];
+  VarArray peer_neigh_recv_buffer = conn_info->peer_buffer[1];
+  VarArray my_seed_recv_buffer = conn_info->my_buffer[0];
+  VarArray my_neigh_recv_buffer = conn_info->my_buffer[1];
+
+  CommSync sync(conn_info->my_ready, conn_info->my_done, conn_info->peer_ready,
+                conn_info->peer_done, local_tid == 0);
 
   __shared__ IdType sorted[1024], index[1024], send_sizes[MAX_CONN],
       send_offset[MAX_CONN + 1];
@@ -101,6 +145,8 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
     IdType* end = option.seeds + end_idx;
     int size = end_idx - start_idx;
 
+    IdType* out_indices = option.out_indices + start_idx * fanout;
+
     // size <= blockDim.x
     if (tid < size) {
       sorted[tid] = start[tid];
@@ -109,6 +155,7 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
     __syncthreads();
     BlockSort(sorted, index, tid, size);
     BlockCount(sorted, option.min_vids, tid, size, n_peers, send_offset);
+    __syncthreads();
     if (tid < size) {
       printf("[Rank %d], tid %d, sorted %lld, index %lld\n", option.rank, tid,
              sorted[tid], index[tid]);
@@ -118,17 +165,47 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
              send_offset[tid]);
     }
 
-    // IdType peer_start = send_offset[peer_id];
-    // IdType peer_end = send_offset[peer_id + 1];
+    sync.Unset();
+    IdType peer_start = send_offset[peer_id];
+    IdType peer_end = send_offset[peer_id + 1];
+    IdType send_size = peer_end - peer_start;
     // Conduct partition in a block
     //   Send seeds to a buffer, where is on the CommArgs
-    // SendSeeds(sorted + peer_start, peer_start - peer_end, local_tid,
-    //        option.threads_per_peer, peer_seed_recv_buffer);
+    sync.PreComm();
+    SendSeeds(sorted + peer_start, send_size, local_tid,
+              option.threads_per_peer, peer_seed_recv_buffer);
+    sync.PostComm();
+    IdType recv_size = *my_seed_recv_buffer.size;
+    IdType* recv_seed_ptr = (IdType*)my_seed_recv_buffer.data;
+    if (local_tid == 0) {
+      printf("[Rank %d], peer_id %d, send size %lld recv size %lld\n",
+             option.rank, peer_id, peer_end - peer_start, recv_size);
+    }
+    if (local_tid < recv_size) {
+      printf("[Rank %d], peer_id %d, local_tid %d, recv seeds %lld\n",
+             option.rank, peer_id, local_tid, recv_seed_ptr[local_tid]);
+    }
 
-    // Global to local nid
-    // LocalSample(my_seed_recv_buffer, peer_neigh_recv_buffer);
-    // CopyNeighToOutptr(my_neigh_recv_buffer, option.out_ptr,
-    // option.out_idices);
+    sync.PreComm();
+    LocalSample(my_seed_recv_buffer, peer_neigh_recv_buffer,
+                option.min_vids[rank], local_tid, option.threads_per_peer,
+                fanout, option.indptr, option.indices, option.global_nid_map);
+    sync.PostComm();
+    IdType neigh_size = *my_neigh_recv_buffer.size;
+    IdType* neigh_ptr = (IdType*)my_neigh_recv_buffer.data;
+    IdType* peer_seed_ptr = (IdType*)peer_seed_recv_buffer.data;
+    if (local_tid < neigh_size) {
+      printf("[Rank %d], peer_id %d, local_tid %d, seed %lld, neighbor %lld\n",
+             option.rank, peer_id, local_tid, peer_seed_ptr[local_tid / fanout],
+             neigh_ptr[local_tid]);
+    }
+    CopyNeighToOutptr(my_neigh_recv_buffer, send_size, index + send_offset[peer_id], fanout, local_tid,
+                      option.threads_per_peer, out_indices);
+    __syncthreads();
+    if (tid < size * fanout) {
+      printf("[Rank %d], tid %d, seed %lld, neighbor %lld\n", option.rank, tid,
+             start[tid / fanout], out_indices[tid]);
+    }
   }
 }
 
