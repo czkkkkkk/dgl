@@ -19,7 +19,7 @@ struct SampleKernelOption {
   int64_t fanout;
   IdType *min_vids;
   int rank, world_size;
-  IdType *out_indices;
+  IdType *out_rows, *out_cols;
 
   int nodes_per_block;
   int threads_per_peer;

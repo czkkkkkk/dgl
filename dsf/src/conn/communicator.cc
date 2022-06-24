@@ -22,7 +22,7 @@ void BuildBlockConnInfo(const std::vector<std::shared_ptr<Connection>>& conns,
     conns[prev]->Setup(&conn_mems[prev], BUFFER_SIZE, &conn_infos[prev],
                        &ex_info);
     auto next_ex_info = coor->RingExchange(next, ex_info);
-    conns[next]->Connect(&conn_infos[prev], BUFFER_SIZE, &next_ex_info);
+    conns[next]->Connect(&conn_infos[next], BUFFER_SIZE, &next_ex_info);
   }
   DSFCUDAMallocAndCopy(&block_conn->conn_mems, conn_mems);
   DSFCUDAMallocAndCopy(&block_conn->conn_infos, conn_infos);

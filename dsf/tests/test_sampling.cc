@@ -53,8 +53,8 @@ void _SimpleTestTwoWorkers(int rank, int world_size) {
     option.n_global_nodes = 4;
     option.fanout = 2;
   }
-  auto frontier = SampleNeighbors(options[rank]);
-  auto vec = frontier.ToVector<int64_t>();
+  auto subg = SampleNeighbors(options[rank]);
+  auto vec = subg->GetCOOMatrix(0).row.ToVector<int64_t>();
   if(rank == 0) {
     ExpVectorEq(vec, {2, 2, 1, 1});
   } else {

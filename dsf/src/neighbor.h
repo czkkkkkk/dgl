@@ -21,7 +21,7 @@ struct SampleOption {
   int64_t n_local_nodes, n_global_nodes;
 };
 
-IdArray SampleNeighbors(const SampleOption& option);
+HeteroGraphPtr SampleNeighbors(const SampleOption& option);
 
 }  // namespace dsf
 }  // namespace dgl
