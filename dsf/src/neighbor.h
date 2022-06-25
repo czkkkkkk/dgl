@@ -19,6 +19,7 @@ struct SampleOption {
   IdArray min_vids;
   int64_t fanout;
   int64_t n_local_nodes, n_global_nodes;
+  int max_n_seeds;
 };
 
 HeteroGraphPtr SampleNeighbors(const SampleOption& option);

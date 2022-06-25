@@ -69,7 +69,7 @@ __device__ void SendSeeds(IdType* input, IdType size, int tid, int n_threads,
 
 __device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
                             int tid, int n_threads, int fanout, IdType* indptr,
-                            IdType* indices, IdType* global_nid_map) {
+                            IdType* indices) {
   const uint64_t random_seed = 7777777;
   curandState rng;
   curand_init(random_seed * gridDim.x + blockIdx.x, threadIdx.x, 0, &rng);
@@ -94,9 +94,7 @@ __device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
     for (int idx = col; idx < fanout; idx += group_size) {
       // FIXME currently we sequential sample seeds
       const int64_t edge = curand(&rng) % deg;
-      // const int64_t edge = idx % deg;
-      outptr[out_row_start + idx] =
-          global_nid_map[indices[in_row_start + edge]];
+      outptr[out_row_start + idx] = indices[in_row_start + edge];
     }
     row += n_groups;
   }
@@ -157,7 +155,8 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
 
   int nodes_per_round = n_blocks * option.nodes_per_block;
   // Calculate # rounds
-  int rounds = DIVUP(option.n_seeds, nodes_per_round);
+  // int rounds = DIVUP(option.n_seeds, nodes_per_round);
+  int rounds = DIVUP(option.max_n_seeds, nodes_per_round);
 
   for (int round = 0; round < rounds; ++round) {
     // Find the range of seeds to sample
@@ -177,10 +176,13 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
       index[tid] = tid;
     }
     __syncthreads();
+
     BlockSort<BLOCK_SIZE>(sorted, index, tid, size);
     BlockCount(sorted, option.min_vids, tid, size, n_peers, send_offset);
     __syncthreads();
+
     sync.Unset();
+
     IdType peer_start = send_offset[peer_id];
     IdType peer_end = send_offset[peer_id + 1];
     IdType send_size = peer_end - peer_start;
@@ -194,11 +196,14 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
     sync.PreComm();
     LocalSample(my_seed_recv_buffer, peer_neigh_recv_buffer,
                 option.min_vids[rank], local_tid, option.threads_per_peer,
-                fanout, option.indptr, option.indices, option.global_nid_map);
+                fanout, option.indptr, option.indices, option.n_local_nodes,
+                option.n_global_nodes);
     sync.PostComm();
+
     CopyNeighToOutptr(my_neigh_recv_buffer, send_size, sorted,
                       index + send_offset[peer_id], fanout, local_tid,
                       option.threads_per_peer, out_rows, out_cols);
+
     __syncthreads();
   }
 }
@@ -209,6 +214,7 @@ void Sample(SampleKernelOption option) {
   int n_blocks = communicator->n_blocks;
   option.nodes_per_block = n_threads;
   option.threads_per_peer = n_threads / option.world_size;
+
   SWITCH_BLOCK_SIZE(n_threads, BLOCK_SIZE, {
     FusedSampleKernel<BLOCK_SIZE>
         <<<n_blocks, n_threads>>>(option, communicator->dev_communicator);

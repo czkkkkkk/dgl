@@ -3,6 +3,8 @@
  */
 #include <dgl/runtime/packed_func.h>
 #include <dgl/runtime/registry.h>
+#include <chrono>
+#include <thread>
 
 #include "./cuda/sample_kernel.h"
 #include "neighbor.h"
@@ -26,19 +28,34 @@ SampleKernelOption BuildKernelOption(const SampleOption& option) {
   kernel_option.min_vids = option.min_vids.Ptr<IdType>();
   kernel_option.rank = Context::Global()->rank;
   kernel_option.world_size = Context::Global()->world_size;
+  kernel_option.max_n_seeds = option.max_n_seeds;
   return kernel_option;
 }
+
 HeteroGraphPtr SampleNeighbors(const SampleOption& option) {
   auto kernel_option = BuildKernelOption(option);
   IdArray out_rows = IdArray::Empty({option.seeds->shape[0] * option.fanout},
-                               option.seeds->dtype, option.seeds->ctx);
+                                    option.seeds->dtype, option.seeds->ctx);
   IdArray out_cols = IdArray::Empty({option.seeds->shape[0] * option.fanout},
-                               option.seeds->dtype, option.seeds->ctx);
+                                    option.seeds->dtype, option.seeds->ctx);
   kernel_option.out_rows = out_rows.Ptr<IdType>();
   kernel_option.out_cols = out_cols.Ptr<IdType>();
   Sample(kernel_option);
-  auto ret = UnitGraph::CreateFromCOO(1, option.n_global_nodes, option.n_global_nodes, out_rows, out_cols);
+  auto ret = UnitGraph::CreateFromCOO(
+      1, option.n_global_nodes, option.n_global_nodes, out_rows, out_cols);
   return ret;
+}
+
+// FIXME: Gather and broadbast the number of seeds takes a lot of time
+int ComputeMaxNSeeds(IdType size) {
+  auto* coor = Context::Global()->coor.get();
+  auto sizes = coor->Gather(size);
+  IdType max_size = size;
+  for (auto v : sizes) {
+    max_size = std::max(max_size, v);
+  }
+  max_size = coor->Broadcast(max_size);
+  return max_size;
 }
 
 DGL_REGISTER_GLOBAL("dsf.neighbor._CAPI_DGLDSFSampleNeighbors")
@@ -54,6 +71,8 @@ DGL_REGISTER_GLOBAL("dsf.neighbor._CAPI_DGLDSFSampleNeighbors")
       SampleOption option;
       option.hg = hg;
       option.seeds = seeds;
+      option.max_n_seeds = ComputeMaxNSeeds(seeds->shape[0]);
+      // option.max_n_seeds = seeds->shape[0];
       option.global_nid_map = global_nid_map;
       option.n_local_nodes = n_local_nodes;
       option.fanout = fanout;
