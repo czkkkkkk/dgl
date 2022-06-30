@@ -28,7 +28,6 @@ SampleKernelOption BuildKernelOption(const SampleOption& option) {
   kernel_option.min_vids = option.min_vids.Ptr<IdType>();
   kernel_option.rank = Context::Global()->rank;
   kernel_option.world_size = Context::Global()->world_size;
-  kernel_option.max_n_seeds = option.max_n_seeds;
   return kernel_option;
 }
 
@@ -71,10 +70,9 @@ DGL_REGISTER_GLOBAL("dsf.neighbor._CAPI_DGLDSFSampleNeighbors")
       SampleOption option;
       option.hg = hg;
       option.seeds = seeds;
-      option.max_n_seeds = ComputeMaxNSeeds(seeds->shape[0]);
-      // option.max_n_seeds = seeds->shape[0];
       option.global_nid_map = global_nid_map;
       option.n_local_nodes = n_local_nodes;
+      option.n_global_nodes = n_global_nodes;
       option.fanout = fanout;
       option.min_vids = min_vids;
       auto ret = SampleNeighbors(option);

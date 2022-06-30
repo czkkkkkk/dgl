@@ -20,7 +20,6 @@ struct SampleKernelOption {
   IdType *min_vids;
   int rank, world_size;
   IdType *out_rows, *out_cols;
-  int max_n_seeds;
 
   int nodes_per_block;
   int threads_per_peer;

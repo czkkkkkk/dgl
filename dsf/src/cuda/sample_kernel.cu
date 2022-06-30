@@ -12,11 +12,39 @@
 #include "./comm_sync.cuh"
 
 #define DIVUP(x, y) ((x) + (y)-1) / (y)
-
 #define INF 0x3f3f3f3f
 
 namespace dgl {
 namespace dsf {
+
+template <int BLOCK_SIZE>
+__device__ IdType GatherMaxRounds(IdType rounds, int local_tid,
+                                  IdType* peer_recv, IdType* my_recv,
+                                  CommSync* sync) {
+  sync->Unset();
+  sync->PreComm();
+  if (local_tid == 0) {
+    *peer_recv = rounds;
+  }
+  sync->PostComm();
+  IdType peer_rounds;
+  if (local_tid == 0) {
+    peer_rounds = *my_recv;
+  } else {
+    peer_rounds = 1;
+  }
+  __syncthreads();
+
+  typedef cub::BlockReduce<IdType, BLOCK_SIZE> BlockReduce;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
+  __shared__ IdType shared_max_rounds;
+  IdType max_rounds = BlockReduce(temp_storage).Reduce(peer_rounds, cub::Max());
+  if (local_tid == 0) {
+    shared_max_rounds = max_rounds;
+  }
+  __syncthreads();
+  return shared_max_rounds;
+}
 
 // Sorting in a block
 template <int BLOCK_SIZE>
@@ -36,12 +64,13 @@ __device__ void BlockSort(IdType* in, IdType* index, int tid, int n) {
   }
 }
 
+template <int WORLD_SIZE>
 __device__ void BlockCount(IdType* in, IdType* min_vids, int tid, int n,
-                           int n_peers, IdType* offset) {
-  if (tid <= n_peers) offset[tid] = 0;
+                           IdType* offset) {
+  if (tid <= WORLD_SIZE) offset[tid] = 0;
   __syncthreads();
   if (tid < n) {
-    for (int peer = 0; peer < n_peers; ++peer) {
+    for (int peer = 0; peer < WORLD_SIZE; ++peer) {
       if (min_vids[peer] <= in[tid] && in[tid] < min_vids[peer + 1]) {
         atomicAdd((unsigned long long*)(offset + peer + 1), 1);
       }
@@ -49,7 +78,7 @@ __device__ void BlockCount(IdType* in, IdType* min_vids, int tid, int n,
   }
   __syncthreads();
   if (tid == 0) {
-    for (int peer = 0; peer < n_peers; ++peer) {
+    for (int peer = 0; peer < WORLD_SIZE; ++peer) {
       offset[peer + 1] += offset[peer];
     }
   }
@@ -117,21 +146,43 @@ __device__ void CopyNeighToOutptr(VarArray neighbors, IdType n_seeds,
 
 #define SWITCH_BLOCK_SIZE(val, BLOCK_SIZE, ...) \
   do {                                          \
-    if ((val) == 128) {                         \
+    if ((val) == 64) {                          \
+      constexpr int BLOCK_SIZE = 64;            \
+      { __VA_ARGS__ }                           \
+    } else if ((val) == 128) {                  \
       constexpr int BLOCK_SIZE = 128;           \
       { __VA_ARGS__ }                           \
-    }                                           \
-    if ((val) == 256) {                         \
+    } else if ((val) == 256) {                  \
       constexpr int BLOCK_SIZE = 256;           \
       { __VA_ARGS__ }                           \
-    }                                           \
-    if ((val) == 512) {                         \
+    } else if ((val) == 512) {                  \
       constexpr int BLOCK_SIZE = 512;           \
       { __VA_ARGS__ }                           \
+    } else {                                    \
+      CHECK(false);                             \
     }                                           \
   } while (0)
 
-template <int BLOCK_SIZE>
+#define SWITCH_WORLD_SIZE(val, WORLD_SIZE, ...) \
+  do {                                          \
+    if ((val) == 1) {                           \
+      constexpr int WORLD_SIZE = 1;             \
+      { __VA_ARGS__ }                           \
+    } else if ((val) == 2) {                    \
+      constexpr int WORLD_SIZE = 2;             \
+      { __VA_ARGS__ }                           \
+    } else if ((val) == 4) {                    \
+      constexpr int WORLD_SIZE = 4;             \
+      { __VA_ARGS__ }                           \
+    } else if ((val) == 8) {                    \
+      constexpr int WORLD_SIZE = 8;             \
+      { __VA_ARGS__ }                           \
+    } else {                                    \
+      CHECK(false);                             \
+    }                                           \
+  } while (0)
+
+template <int BLOCK_SIZE, int WORLD_SIZE>
 __global__ void FusedSampleKernel(SampleKernelOption option,
                                   Communicator* communicator) {
   int bid = blockIdx.x;
@@ -151,12 +202,15 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
   CommSync sync(conn_info->my_ready, conn_info->my_done, conn_info->peer_ready,
                 conn_info->peer_done, local_tid == 0);
 
-  __shared__ IdType sorted[1024], index[1024], send_offset[MAX_CONN + 1];
+  __shared__ IdType sorted[BLOCK_SIZE], index[BLOCK_SIZE],
+      send_offset[WORLD_SIZE + 1];
 
   int nodes_per_round = n_blocks * option.nodes_per_block;
   // Calculate # rounds
-  // int rounds = DIVUP(option.n_seeds, nodes_per_round);
-  int rounds = DIVUP(option.max_n_seeds, nodes_per_round);
+  int rounds = DIVUP(option.n_seeds, nodes_per_round);
+  rounds = GatherMaxRounds<BLOCK_SIZE>((IdType)rounds, local_tid,
+                                       peer_seed_recv_buffer.size,
+                                       my_seed_recv_buffer.size, &sync);
 
   for (int round = 0; round < rounds; ++round) {
     // Find the range of seeds to sample
@@ -176,9 +230,8 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
       index[tid] = tid;
     }
     __syncthreads();
-
     BlockSort<BLOCK_SIZE>(sorted, index, tid, size);
-    BlockCount(sorted, option.min_vids, tid, size, n_peers, send_offset);
+    BlockCount<WORLD_SIZE>(sorted, option.min_vids, tid, size, send_offset);
     __syncthreads();
 
     sync.Unset();
@@ -196,8 +249,7 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
     sync.PreComm();
     LocalSample(my_seed_recv_buffer, peer_neigh_recv_buffer,
                 option.min_vids[rank], local_tid, option.threads_per_peer,
-                fanout, option.indptr, option.indices, option.n_local_nodes,
-                option.n_global_nodes);
+                fanout, option.indptr, option.indices);
     sync.PostComm();
 
     CopyNeighToOutptr(my_neigh_recv_buffer, send_size, sorted,
@@ -216,8 +268,10 @@ void Sample(SampleKernelOption option) {
   option.threads_per_peer = n_threads / option.world_size;
 
   SWITCH_BLOCK_SIZE(n_threads, BLOCK_SIZE, {
-    FusedSampleKernel<BLOCK_SIZE>
-        <<<n_blocks, n_threads>>>(option, communicator->dev_communicator);
+    SWITCH_WORLD_SIZE(option.world_size, WORLD_SIZE, {
+      FusedSampleKernel<BLOCK_SIZE, WORLD_SIZE>
+          <<<n_blocks, n_threads>>>(option, communicator->dev_communicator);
+    });
   });
   CUDACHECK(cudaGetLastError());
   CUDACHECK(cudaStreamSynchronize(0));
