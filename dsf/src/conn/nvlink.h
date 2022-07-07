@@ -11,9 +11,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "../utils.h"
 #include "nvmlwrap.h"
 #include "topo.h"
-#include "../utils.h"
 
 namespace dgl {
 namespace dsf {
@@ -189,7 +189,7 @@ static int getNumNvlinks(const char* busId) {
                         : CONNECT_NVLINK * nvlinks;
 }
 
-}
-}
+}  // namespace dsf
+}  // namespace dgl
 
 #endif  // DGL_DSF_CONN_NVLINK_H_

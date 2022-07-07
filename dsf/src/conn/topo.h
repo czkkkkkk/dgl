@@ -8,15 +8,14 @@
 #define DGL_DSF_CONN_TOPO_H_
 
 #include <ctype.h>
-#include <cstring>
-#include <dmlc/logging.h>
 #include <cuda_runtime.h>
+#include <dmlc/logging.h>
+#include <cstring>
 
 #include "../utils.h"
 
 namespace dgl {
 namespace dsf {
-
 
 #define MAXPATHSIZE 1024
 
@@ -78,7 +77,7 @@ static int pciDistance(char* path1, char* path2) {
   return PATH_PXB;
 }
 
-}
-}
+}  // namespace dsf
+}  // namespace dgl
 
 #endif  // DGL_DSF_CONN_TOPO_H_

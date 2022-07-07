@@ -14,7 +14,7 @@ namespace dsf {
 
 struct SampleOption {
   HeteroGraphRef hg;
-  IdArray seeds; // Seeds with global node ids
+  IdArray seeds;  // Seeds with global node ids
   IdArray global_nid_map;
   IdArray min_vids;
   int64_t fanout;
@@ -26,4 +26,4 @@ HeteroGraphPtr SampleNeighbors(const SampleOption& option);
 }  // namespace dsf
 }  // namespace dgl
 
-#endif // DGL_DSF_NEIGHBOR_H_
+#endif  // DGL_DSF_NEIGHBOR_H_

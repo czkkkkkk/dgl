@@ -12,4 +12,4 @@ void Initialize(int rank, int world_size);
 }
 }  // namespace dgl
 
-#endif
+#endif  // DGL_DSF_CORE_H_

@@ -1,12 +1,12 @@
 /*!
  *  Copyright (c) 2022 by Contributors
  */
-#include <gtest/gtest.h>
 #include <dmlc/logging.h>
+#include <gtest/gtest.h>
+#include <mpi.h>
 
 #include "core.h"
 #include "utils.h"
-#include <mpi.h>
 
 using namespace dgl::dsf;
 

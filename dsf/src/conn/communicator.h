@@ -1,8 +1,8 @@
 /*!
  *  Copyright (c) 2022 by Contributors
  */
-#ifndef DGL_DSF_CUDA_CONN_H_
-#define DGL_DSF_CUDA_CONN_H_
+#ifndef DGL_DSF_CONN_COMMUNICATOR_H_
+#define DGL_DSF_CONN_COMMUNICATOR_H_
 
 #define MAX_NUM_COMM_BLOCKS 64
 
@@ -25,7 +25,7 @@ struct Communicator {
 
 void SetupCommunicator(Communicator* communicator);
 
-}
-}
+}  // namespace dsf
+}  // namespace dgl
 
-#endif  // DGL_DSF_CUDA_CONN_H_
+#endif  // DGL_DSF_CONN_COMMUNICATOR_H_

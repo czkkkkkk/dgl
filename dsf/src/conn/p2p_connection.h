@@ -4,10 +4,10 @@
 #ifndef DGL_DSF_CONN_P2P_CONNECTION_H_
 #define DGL_DSF_CONN_P2P_CONNECTION_H_
 
+#include <cuda_runtime.h>
+
 #include "../utils.h"
 #include "./connection.h"
-
-#include <cuda_runtime.h>
 
 namespace dgl {
 namespace dsf {
@@ -19,12 +19,13 @@ struct P2pExchangeConnInfo {
 
 class P2pConnection : public Connection {
  public:
-  P2pConnection(ProcInfo my_info, ProcInfo peer_info) :Connection(my_info, peer_info) {}
+  P2pConnection(ProcInfo my_info, ProcInfo peer_info)
+      : Connection(my_info, peer_info) {}
 
   void Setup(ConnMem** conn_mem, int buffer_size, ConnInfo* conn_info,
              ExchangeConnInfo* ex_info) override {
     int mem_size = offsetof(ConnMem, buffer) + buffer_size;
-    DSFCudaMalloc((char**)conn_mem, mem_size);
+    DSFCudaMalloc(reinterpret_cast<char**>(conn_mem), mem_size);
     conn_info->my_ready = &(*conn_mem)->ready;
     conn_info->my_done = &(*conn_mem)->done;
     conn_info->my_buffer[0] = BuildVarArray(&(*conn_mem)->buffer);
@@ -33,7 +34,8 @@ class P2pConnection : public Connection {
 
     P2pExchangeConnInfo p2p_info;
     if (!my_info_.SameDevice(peer_info_)) {
-      cudaIpcGetMemHandle(&p2p_info.dev_ipc, (void*)(*conn_mem));
+      cudaIpcGetMemHandle(&p2p_info.dev_ipc,
+                          reinterpret_cast<void*>(*conn_mem));
       static_assert(sizeof(P2pExchangeConnInfo) <= sizeof(ExchangeConnInfo),
                     "P2P exchange connection info too large");
     } else {
@@ -44,13 +46,15 @@ class P2pConnection : public Connection {
 
   void Connect(ConnInfo* conn_info, int buffer_size,
                ExchangeConnInfo* peer_ex_info) override {
-    P2pExchangeConnInfo* peer_info = (P2pExchangeConnInfo*)peer_ex_info;
+    P2pExchangeConnInfo* peer_info =
+        reinterpret_cast<P2pExchangeConnInfo*>(peer_ex_info);
     ConnMem* ptr;
     if (!my_info_.SameDevice(peer_info_)) {
-      CUDACHECK(cudaIpcOpenMemHandle((void**)&ptr, peer_info->dev_ipc,
+      CUDACHECK(cudaIpcOpenMemHandle(reinterpret_cast<void**>(&ptr),
+                                     peer_info->dev_ipc,
                                      cudaIpcMemLazyEnablePeerAccess));
     } else {
-      ptr = (ConnMem*)peer_info->ptr;
+      ptr = reinterpret_cast<ConnMem*>(peer_info->ptr);
     }
     conn_info->peer_ready = &ptr->ready;
     conn_info->peer_done = &ptr->done;

@@ -1,8 +1,8 @@
 /*!
  *  Copyright (c) 2022 by Contributors
  */
-#ifndef DGL_DSF_CONN_INFO_H_
-#define DGL_DSF_CONN_INFO_H_
+#ifndef DGL_DSF_CONN_CONN_INFO_H_
+#define DGL_DSF_CONN_CONN_INFO_H_
 
 #include <cstdint>
 
@@ -43,7 +43,7 @@ struct ConnInfo {
 
 static VarArray BuildVarArray(void *ptr) {
   VarArray ret;
-  ret.size = (int64_t *)(ptr);
+  ret.size = reinterpret_cast<int64_t *>(ptr);
   ret.data = ptr + MEM_ALIGN;
   return ret;
 }
@@ -51,4 +51,4 @@ static VarArray BuildVarArray(void *ptr) {
 }  // namespace dsf
 }  // namespace dgl
 
-#endif  // DGL_DSF_CONN_INFO_H_
+#endif  // DGL_DSF_CONN_CONN_INFO_H_

@@ -3,6 +3,7 @@
  */
 #include <dgl/runtime/packed_func.h>
 #include <dgl/runtime/registry.h>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 

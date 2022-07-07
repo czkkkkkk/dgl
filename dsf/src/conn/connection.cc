@@ -5,10 +5,10 @@
 
 #include <nvml.h>
 
-#include "./p2p_connection.h"
-#include "./nvmlwrap.h"
-#include "./topo.h"
 #include "./nvlink.h"
+#include "./nvmlwrap.h"
+#include "./p2p_connection.h"
+#include "./topo.h"
 
 #define NVML_DEVICE_PCI_BUS_ID_BUFFER_SIZE 32
 
@@ -64,15 +64,16 @@ bool CanP2p(const ProcInfo& my_info, const ProcInfo& peer_info) {
   return false;
 }
 
-std::shared_ptr<Connection> Connection::BuildConnection(ProcInfo r1, ProcInfo r2) {
-  if(CanP2p(r1, r2)) {
+std::shared_ptr<Connection> Connection::BuildConnection(ProcInfo r1,
+                                                        ProcInfo r2) {
+  if (CanP2p(r1, r2)) {
     return std::make_shared<P2pConnection>(r1, r2);
   }
   LOG(FATAL) << "Currently can only support GPUs with nvlinks";
-  CHECK(r1.hostname == r2.hostname) << "Currently only support GPUs on the same machine";
+  CHECK(r1.hostname == r2.hostname)
+      << "Currently only support GPUs on the same machine";
   return nullptr;
-
 }
 
-}
-}
+}  // namespace dsf
+}  // namespace dgl

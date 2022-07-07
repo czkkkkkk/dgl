@@ -74,4 +74,4 @@ static bool wrapNvmlDeviceGetNvLinkCapability(nvmlDevice_t device,
   return true;
 }
 
-#endif  // DGL_DSF_CONN_NVMLWARP_H_
+#endif  // DGL_DSF_CONN_NVMLWRAP_H_

@@ -121,7 +121,8 @@ __device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
     IdType out_row_start = row * fanout;
     IdType deg = indptr[local_nid + 1] - in_row_start;
     for (int idx = col; idx < fanout; idx += group_size) {
-      // FIXME currently we sequential sample seeds
+      // sequentially sample seeds
+      // const int64_t edge = idx % deg;
       const int64_t edge = curand(&rng) % deg;
       outptr[out_row_start + idx] = indices[in_row_start + edge];
     }
