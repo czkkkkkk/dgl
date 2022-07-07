@@ -7,6 +7,6 @@ reddit=/efs/zkcai/projects/dsdgl/examples/pytorch/graphsage/ds/data/reddit${n_gp
 dataset=$reddit
 dataset=$prod
 
-python test.py --world_size ${n_gpus} \
+python graphsage_sampler.py --world_size ${n_gpus} \
   --part_config=$dataset \
   --batch_size=1024
