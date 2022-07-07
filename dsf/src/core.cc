@@ -9,8 +9,12 @@
 
 #include "./context.h"
 #include "./utils.h"
+#include "./core.h"
 #include "c_api_common.h"
+#include "conn/communicator.h"
+#include "conn/connection.h"
 #include "dmlc/logging.h"
+#include "conn/nvmlwrap.h"
 
 using namespace dgl::runtime;
 
@@ -23,14 +27,23 @@ void InitCoordinator(Context* context) {
       new Coordinator(context->rank, context->world_size, master_port));
 }
 
+
+void InitCommunicator(Context* context) {
+  wrapNvmlInit();
+  context->communicator = std::unique_ptr<Communicator>(new Communicator());
+  SetupCommunicator(context->communicator.get());
+}
+
 void Initialize(int rank, int world_size) {
-  LOG(INFO) << "[Rank " << rank << "] Initialize DSF";
+  LOG(INFO) << "[Rank " << rank << "] Initializing DSF context";
   auto* context = Context::Global();
   context->rank = rank;
   context->world_size = world_size;
+  CUDACHECK(cudaSetDevice(rank));
   InitCoordinator(context);
+  InitCommunicator(context);
 
-  LOG(INFO) << "[Rank " << rank << "] Finish initialization";
+  LOG(INFO) << "[Rank " << rank << "] Finished initialization";
 }
 
 DGL_REGISTER_GLOBAL("dsf._CAPI_DGLDSFInitialize")

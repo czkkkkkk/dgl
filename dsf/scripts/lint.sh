@@ -1,1 +1,1 @@
-python3 ../third_party/dmlc-core/scripts/lint.py dgl-dsf cpp ../dsf
+python3 ../third_party/dmlc-core/scripts/lint.py dgl-dsf cpp ../dsf --exclude_path=../dsf/src/cuda

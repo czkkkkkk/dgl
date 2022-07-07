@@ -240,10 +240,13 @@ if(ZMQ_INCLUDE_DIR AND ZMQ_LIBRARY)
   message(STATUS "  (Headers) ${ZMQ_INCLUDE_DIR}")
   message(STATUS "  (Library) ${ZMQ_LIBRARY}")
 else()
-  message(FATAL_ERROR "ZeorMQ not found")
+  message(FATAL_ERROR "ZeroMQ not found")
 endif()
 target_include_directories(dgl PRIVATE ${ZMQ_INCLUDE_DIR})
 list(APPEND DGL_LINKER_LIBS ${ZMQ_LIBRARY})
+
+# NVML
+list(APPEND DGL_LINKER_LIBS /usr/local/cuda/lib64/stubs/libnvidia-ml.so)
 
 ###### DSF ###############
 
@@ -371,3 +374,27 @@ if(BUILD_CPP_TEST)
   target_link_libraries(runUnitTests dgl)
   add_test(UnitTests runUnitTests)
 endif(BUILD_CPP_TEST)
+
+###### DSF Test ###############
+message(STATUS "Build with DSF unittest")
+find_package(MPI REQUIRED)
+add_subdirectory(./third_party/googletest)
+enable_testing()
+include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
+include_directories("include")
+include_directories("third_party/dlpack/include")
+include_directories("third_party/xbyak")
+include_directories("third_party/dmlc-core/include")
+include_directories("third_party/phmap")
+include_directories("third_party/libxsmm/include")
+include_directories("dsf/src")
+include_directories("src")
+include_directories(${MPI_INCLUDE_PATH})
+file(GLOB_RECURSE TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/dsf/tests/*.cc)
+add_executable(runUnitTests ${TEST_SRC_FILES})
+target_link_libraries(runUnitTests gtest gtest_main ${MPI_C_LIBRARIES})
+target_link_libraries(runUnitTests dgl)
+add_test(UnitTests runUnitTests)
+###### DSF Test ###############
+
+
