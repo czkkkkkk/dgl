@@ -97,7 +97,8 @@ __device__ void SendSeeds(IdType* input, IdType size, int tid, int n_threads,
 }
 
 __device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
-                            int tid, int n_threads, int fanout, IdType* indptr,
+                            int tid, int n_threads, int fanout,
+                            IdType* global_nid_map, IdType* indptr,
                             IdType* indices) {
   const uint64_t random_seed = 7777777;
   curandState rng;
@@ -124,7 +125,8 @@ __device__ void LocalSample(VarArray seeds, VarArray output, IdType seed_offset,
       // sequentially sample seeds
       // const int64_t edge = idx % deg;
       const int64_t edge = curand(&rng) % deg;
-      outptr[out_row_start + idx] = indices[in_row_start + edge];
+      outptr[out_row_start + idx] =
+          global_nid_map[indices[in_row_start + edge]];
     }
     row += n_groups;
   }
@@ -250,7 +252,7 @@ __global__ void FusedSampleKernel(SampleKernelOption option,
     sync.PreComm();
     LocalSample(my_seed_recv_buffer, peer_neigh_recv_buffer,
                 option.min_vids[rank], local_tid, option.threads_per_peer,
-                fanout, option.indptr, option.indices);
+                fanout, option.global_nid_map, option.indptr, option.indices);
     sync.PostComm();
 
     CopyNeighToOutptr(my_neigh_recv_buffer, send_size, sorted,

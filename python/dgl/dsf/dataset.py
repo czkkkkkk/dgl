@@ -32,7 +32,7 @@ class DistributedDataset(object):
         self.device = th.device('cuda:%d' % self.rank)
         self.train_nid = rebalance_train_nids(
             self.train_nid, self.batch_size, self.global_nid_map).to(self.device)
-        self.dgl_graph = csr_to_global_id(self.dgl_graph, self.global_nid_map)
+        # self.dgl_graph = csr_to_global_id(self.dgl_graph, self.global_nid_map)
         self.dgl_graph = self.dgl_graph.to(self.device)
         self.global_nid_map = self.global_nid_map.to(self.device)
         self.min_vids = [0] + list(self.gpb._max_node_ids)
