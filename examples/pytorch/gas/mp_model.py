@@ -2,8 +2,8 @@ import torch as th
 import torch.nn as nn
 
 import dgl.function as fn
-import dgl.mp as mp
 from dgl.nn.functional import edge_softmax
+
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -24,6 +24,7 @@ class MLP(nn.Module):
             g.nodes["v"].data["h"] = v_feat
             g.apply_edges(self.apply_edges, etype="forward")
             return g.edges["forward"].data["score"]
+
 
 class GASConv(nn.Module):
     """One layer of GAS."""
@@ -61,26 +62,37 @@ class GASConv(nn.Module):
         self.Vu = nn.Linear(u_in_dim, u_out_dim - nu_dim)
         self.Vv = nn.Linear(v_in_dim, v_out_dim - nv_dim)
 
-    def forward(self, g, e_feat, u_feat, v_feat):
+    def forward(self, g, f_feat, b_feat, u_feat, v_feat):
+        src_u_feat, src_v_feat = u_feat, v_feat
+        dst_u_feat = src_u_feat[: g.number_of_dst_nodes(ntype="u")]
+        dst_v_feat = src_v_feat[: g.number_of_dst_nodes(ntype="u")]
+
         # formula 3 and 4 (optimized implementation to save memory)
-        he_u = self.u_linear(u_feat)
-        he_v = self.v_linear(v_feat)
-        fw_he_e = self.e_linear(e_feat)
-        he = fw_he_e + mp.copy_u(g, he_u, etype='forward') + mp.copy_v(he_v)
+        src_he_u = self.u_linear(src_u_feat)
+        src_he_v = self.v_linear(src_v_feat)
+        dst_he_u = self.u_linear(dst_u_feat)
+        dst_he_v = self.u_linear(dst_v_feat)
+        fw_he_e = self.e_linear(f_feat)
+        bw_he_e = self.e_linear(b_feat)
+        hf = bw_he_e + mp.copy_u(g, dst_he_u, etype='backward') + mp.copy_v(src_he_v, etype='backward')
+        hb = fw_he_e + mp.copy_u(g, src_he_u, etype='forward') + mp.copy_v(dst_he_v, etype='forward')
         if self.activation is not None:
-            he = self.activation(he)
+            hf = self.activation(hf)
+            hb = self.activation(hb)
 
         # formula 6
-        h_ve = th.cat([mp.copy_u(g, he_v, etpye='backward'), e_feat], -1)
-        h_ue = th.cat([mp.copy_u(g, he_u, etpye='forward'), e_feat], -1)
+        h_ve = th.cat([mp.copy_u(g, src_v_feat, etpye='backward'), b_feat], -1)
+        h_ue = th.cat([mp.copy_u(g, src_u_feat, etpye='forward'), f_feat], -1)
 
         # formula 7, self-attention
-        h_att_u = self.W_ATTN_u(u_feat)
-        h_att_v = self.W_ATTN_v(v_feat)
+        src_h_att_u = self.W_ATTN_u(src_u_feat)
+        src_h_att_v = self.W_ATTN_v(src_v_feat)
+        dst_h_att_u = self.W_ATTN_u(dst_u_feat)
+        dst_h_att_v = self.W_ATTN_v(dst_v_feat)
 
         # Step 1: dot product
-        bw_edotv = h_ve * mp.copy_u(g, h_att_u, etype='backward')
-        fw_edotv = h_ue * mp.copy_u(g, h_att_v, etype='forward')
+        bw_edotv = h_ve * mp.copy_u(g, dst_h_att_u, etype='backward')
+        fw_edotv = h_ue * mp.copy_u(g, src_h_att_v, etype='forward')
 
         # Step 2. softmax
         bw_sfm = mp.edge_softmax(g, bw_edotv, etype='backward')
@@ -103,7 +115,8 @@ class GASConv(nn.Module):
             h_nv = self.activation(h_nv)
 
         # Dropout
-        he = self.dropout(he)
+        hf = self.dropout(hf)
+        hb = self.dropout(hb)
         h_nu = self.dropout(h_nu)
         h_nv = self.dropout(h_nv)
 
@@ -111,7 +124,7 @@ class GASConv(nn.Module):
         hu = th.cat([self.Vu(u_feat), h_nu], -1)
         hv = th.cat([self.Vv(v_feat), h_nv], -1)
 
-        return he, hu, hv
+        return hf, hb, hu, hv
 
 class GAS(nn.Module):
     def __init__(
@@ -170,11 +183,21 @@ class GAS(nn.Module):
                 )
             )
 
-    def forward(self, graph, e_feat, u_feat, v_feat):
-        # For full graph training, directly use the graph
+    def forward(self, subgraph, blocks, f_feat, b_feat, u_feat, v_feat):
         # Forward of n layers of GAS
-        for layer in self.layers:
-            e_feat, u_feat, v_feat = layer(graph, e_feat, u_feat, v_feat)
+        for layer, block in zip(self.layers, blocks):
+            f_feat, b_feat, u_feat, v_feat = layer(
+                block,
+                f_feat[: block.num_edges(etype="forward")],
+                b_feat[: block.num_edges(etype="backward")],
+                u_feat,
+                v_feat,
+            )
 
         # return the result of final prediction layer
-        return self.predictor(graph, e_feat, u_feat, v_feat)
+        return self.predictor(
+            subgraph,
+            f_feat[: subgraph.num_edges(etype="forward")],
+            u_feat,
+            v_feat,
+        )
