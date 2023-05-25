@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "./shared_memory.h"
+
 namespace graphbolt {
 namespace sampling {
 
@@ -43,11 +45,19 @@ class CSCSamplingGraph : public torch::CustomClassHolder {
    * present.
    * @param type_per_edge A tensor representing the type of each edge, if
    * present.
+   * @param tensor_meta_shm The shared memory used to hold the meta information
+   * of the tensors associated with this class. Nullptr means that the graph is
+   * not on shared memory.
+   * @param tensor_data_shm The shared memory used to old the data of the
+   * tensors associated with this class. Nullptr means that the graph is not on
+   * shared memory.
    */
   CSCSamplingGraph(
       torch::Tensor& indptr, torch::Tensor& indices,
       const torch::optional<torch::Tensor>& node_type_offset,
-      const torch::optional<torch::Tensor>& type_per_edge);
+      const torch::optional<torch::Tensor>& type_per_edge,
+      SharedMemoryPtr&& tensor_meta_shm = nullptr,
+      SharedMemoryPtr&& tensor_data_shm = nullptr);
 
   /**
    * @brief Create a homogeneous CSC graph from tensors of CSC format.
@@ -105,6 +115,24 @@ class CSCSamplingGraph : public torch::CustomClassHolder {
    */
   void Save(torch::serialize::OutputArchive& archive) const;
 
+  /**
+   * @brief Copy the graph to shared memory.
+   * @param shared_memory_name The name of the shared memory.
+   *
+   * @return A new CSCSamplingGraph object on shared memory.
+   */
+  c10::intrusive_ptr<CSCSamplingGraph> CopyToSharedMemory(
+      const std::string& shared_memory_name);
+
+  /**
+   * @brief Load the graph from shared memory.
+   * @param shared_memory_name The name of the shared memory.
+   *
+   * @return A new CSCSamplingGraph object on shared memory.
+   */
+  static c10::intrusive_ptr<CSCSamplingGraph> LoadFromSharedMemory(
+      const std::string& shared_memory_name);
+
  private:
   /** @brief CSC format index pointer array. */
   torch::Tensor indptr_;
@@ -127,6 +155,20 @@ class CSCSamplingGraph : public torch::CustomClassHolder {
    * edge types. The length of it is equal to the number of edges.
    */
   torch::optional<torch::Tensor> type_per_edge_;
+
+  /**
+   * @brief Maximum number of bytes used to serialize the metadata of the
+   * member tensors, including tensor shape and dtype.
+   */
+  static constexpr int64_t SERIALIZED_METAINFO_SIZE_MAX = 32768;
+
+  /**
+   * @brief Shared memory used to hold the tensor meta information and data of
+   * this class. By storing its shared memory objects, the graph controls the
+   * resources of shared memory, which will be released automatically when the
+   * graph is destroyed.
+   */
+  SharedMemoryPtr tensor_meta_shm_, tensor_data_shm_;
 };
 
 }  // namespace sampling
